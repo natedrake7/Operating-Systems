@@ -1,39 +1,39 @@
-Λαμπρόπουλος Κωνσταντίνος
+Lampropoulos Konstantinos
 
-Υπάρχουν makefiles σε κάθε ένα folder (client,server) για το κάθε ένα αντίστοιχα και γίνονται compile με την εντολή make.Το παρόν πρόγραμμα δημιουργεί ένα local server και ένα local client τα οποία επικοινωνούν μέσω TCP connection και ο server τρέχει επ'αόριστον.Η λειτουργία του είναι να δέχεται αιτήματα ο server από πολλαπλούς clients ,στα οποία ζητούνται αρχεία που βρίσκονται στο folder που είναι ο server και να τα επιστρέφει στον client.
-Μια ενδεικτική εκτέλεση είναι : 
+This implementation of a server client instance has 2 makefiles(one for the client and one for the server) and both are compiled using make.The server side of the program creates a local server
+and the client side creates a client instance,which communicate through a TCP connection.The server runs indefinitely.The main purpose of this exercise is to create a server which handles multiple client requests
+which are to locate a folder in the server disk and send it to the client.
+An example execution of the client side looks like below:
 ./remoteclient -p 2020 -d folder1 -i 127.0.0.1
-όπου με την παράμμετρο -p ορίζεται σε ποιό port θα συνδεθεί,με την -d ποιο folder ζητάει ο client και με το -i το ip του server(εδώ δεν υπάρχει συγκεκριμένο).
+where,by the -p parameter we declare which port we want to connect,-d parameter specifies which folder client requests to copy and -i specifies the IP address of the server(since we are local any IP address will do).
+An example execution of the serve side looks like below:
 ./dataserver -p 2020 -s 10 -q 8 -b 512
-όπου η παράμμετρος -p πάλι είναι το port στο οποίο θα γίνει initialize ο server,η -s για το πόσα worker threads(η λειτουργία τους περιγράφεται παρακάτω)
-θα υπάρχουν ,η -q για την ουρά που θα υπάρχει ώστε να εκτελούνται τα requests και η -b για το blocksize ,δηλαδή το πόσα bytes θα στέλνει κάθε φορά στον client.
+where,-p parameter specifies the port where the server will be initialized,-s specifies how many worker threads will be initialized(their functionality is explained below),
+-q parameter specifies the size of the queue in which client requests are set to and -b specifies the block size (how many bytes are sent to the client each time).
 
-Σχεδιαστικές επιλογές : 
 
-Αν τα makefiles  δεν δουλεύουν ο server γίνεται compile με το command : g++ dataserver.cpp threads.cpp -lpthread -o dataserver,
-και ο client : g++ -o remoteclient remoteclient.cpp
 
-Στον κώδικα έχω προσθέσει σχόλια για να είναι πιο εύκολη η ανάγνωσή του.
+Development Options:
+If for any reason any of the makefiles doesn't work,server can be compiled by the command : g++ dataserver.cpp threads.cpp -lpthread -o dataserver,
+and client can be compiled by the command : g++ -o remoteclient remoteclient.cpp.
+
+There are comments in the code explaining every step.
 
 Dataserver : 
 
-1)WorkerThreads : Ξεκινάνε πριν γίνει initialized ο server.Είναι σε ενα infinite while loop μιας και ο server υποθέτουμε οτι τρέχει για πάντα.
-Δεν υλοποιήθηκε να στέλνει το περιεχόμενο των αρχείων ,παρά μόνο το όνομα του αρχείου.
-Λειτουργούν με τα semaphores για να περιμένουν να λάβουν ενημέρωση ότι υπάρχει διαθέσιμο file στο queue.Δεν γίνονται join ή detach μιας και δεν σταματάει να δουλεύει ο dataserver.
-Υπάρχουν σχόλια,προσπάθειας υλοποίησης του να στέλνονται και τα δεδομένα των αρχείων,αλλά για να φανεί η καλή λειτουργία του υπόλοιπου κώδικα,τα έχω αφήσει σχόλια.
+1)WorkerThreads : They are initialized before the server is set to receive requests.They run indefinitely,since we suppose that server does that too.
+They work with semaphores,by which they wait to receive an update that  there is an available file in the queue.They are never joined or detaches since server runs 24/7.
+The whole process of sending the files of a folder and its contents was not implemented fully,and only all the files empty are being sent.There are comments of ideas to implement 
+the functionality to send whole files by they are commented since they disrupted the execution.
 
-2)Communication Threads : Δημιουργείται ένα για κάθε client.Βρίσκουν αν υπάρχει το directory που ζητάει ο client.Αν υπάρχει,αναδρομικά βρίσκουν κάθε αρχείο του directory
-και το προσθέτουν στην ουρά,η οποία ελέγχεται με semaphores ,ώστε να μην ξεπερνάει το μέγεθός της.Είναι υλοποιημένη και η χρήση των mutexes και στα WorkerThreads ώστε να μην
-κάνουν ταυτόχρονα access shared memory πολλά threads.Επίσης στέλνουν το πόσα αρχεία υπάρχουν στο ζητούμενο directory,στον client,ώστε να ξέρει πότε να σπασει το loop του.
-Τέλος περιμένουν απάντηση από τον client ότι δέχθηκε όλα τα αρχεία ώστε να κλείσουν το file descriptor (για να μην τελειώσουν τα διαθέσιμα file descriptors).
+2)Communication Threads : They are created for each client.They search the server disk to locate the folder(or single file) the client requests.If there is,they recursively send each file
+to the queue,and if it is full they wait (by using semaphores) until there is a space in the queue open.They also inform the client of how many files where located in the directory 
+so he doesn't cut the connection to the server earlier than expected and return corrupt files.Lastly,the await a report from the cleint that he received all the files.
 
-3)Server: Ο server δέχεται connection requests απο clients,τα αποδέχεται,στέλνει το blocksize σε κάθε client ώστε να το ξέρει απο πριν,και έπειτα δημιουργεί τα Communication Threads.
+3)Server: Server accepts connection requests from clients,informs client of the blocksize and creates the Communication Threads,
 
 RemoteClient :
+Creates the socket to connect with the server,receives tha packet size,and reads packet size bytes until he has received all the files
+he requested.
 
-Δημιουργεί το socket ,δέχεται το packet size και σ'ένα infinite while loop διαβάζει συνεχώς μέχρι blocksize bytes.
-Το loop τερματίζει όταν έχει δεχθεί τον αριθμό των αρχείων που πρέπει να έχει,και έχει δημιουργήσει τόσα αρχεία.
-Πάλι υπάρχουν σχόλια κώδικα που ήταν η προσπάθειά μου για να δέχεται και το περιεχόμενο των αρχείων,αλλά πάλι για να φαίνεται η λειτουργία του
-υπόλοιπου προγράμματος,το άφησα σε σχόλια.
-
-Έχω χωρίσει τα .cpp αρχεία σε φακέλους client και server,και στον κάθε φάκελο υπάρχει το αντίστοιχο makefile.
+The *.cpp files for each implementation are broken down to 2 folder,server and client.
